@@ -9,7 +9,17 @@
       <button type="button" v-on:click="mint">Click Me!</button>
     </div>
     <div class="section">
-      <h2>All my NFT</h2>
+      <h2>All NFTs</h2>
+    </div>
+    <div class="container">
+      <img
+        v-for="blob in blobs"
+        :key="blob.id"
+        :alt="blob.metaData.name"
+        :src="blob.metaData.image"
+        width="250" height="250"
+        class="img"
+      />
     </div>
   </div>
   <div v-else>Loading...</div>
@@ -19,6 +29,10 @@
 import { mapGetters } from "vuex";
 import Web3 from "web3";
 import Blob from "./contracts/Blob.json";
+import blobshape from "blobshape";
+import { create } from "ipfs-http-client";
+
+const ipfsClient = create("https://ipfs.infura.io:5001/api/v0");
 
 export default {
   name: "app",
@@ -31,6 +45,9 @@ export default {
       account: "",
       contract: null,
       totalSupply: 0,
+      ipfsBaseUrl: "https://ipfs.infura.io/ipfs/",
+      name: "Blob",
+      description: "Blob",
     };
   },
   computed: mapGetters("drizzle", ["isDrizzleInitialized"]),
@@ -61,24 +78,38 @@ export default {
       if (networkData) {
         const abi = Blob.abi;
         const address = networkData.address;
-
         this.contract = new web3.eth.Contract(abi, address);
-        this.totalSupply = await this.contract.methods.totalSupply().call();
-
-        this.blobs = await this.contract.methods
-          .userOwnedTokens(this.account)
-          .call();
-        console.log(this.blobs);
+        this.fetchData();
       } else {
         window.alert("Smart contract not deployed to detected network.");
       }
     },
-    mint: function () {
+    mint: async function () {
+      const { path, seedValue } = blobshape({
+        growth: 1,
+        edges: 11,
+        seed: null,
+        pattern: "cross",
+      });
+      let color1 = this.randomColor();
+      let color2 = this.randomColor();
+
+      let svg = this.getSVG(color1, color2, path);
+      let base64 = this.convertToBase64(svg);
+
+      let addedMetaData = await this.uploadIPFS(base64);
+
+      console.log(this.ipfsBaseUrl + addedMetaData.path);
+
       this.contract.methods
-        .mint(this.account)
+        .mint(this.account, this.ipfsBaseUrl + addedMetaData.path)
         .send({ from: this.account })
-        .once("receipt", (receipt) => {
+        .once("error", (err) => {
+          console.log(err);
+        })
+        .then((receipt) => {
           console.log(receipt);
+          this.fetchData();
         });
     },
     randomColor: function () {
@@ -97,9 +128,49 @@ export default {
         ")"
       );
     },
-    getSVG: function () {},
-    convertToBase64: function () {},
-    uploadIPFS: function () {},
+    getSVG: function (color1, color2, path) {
+      let svg = `
+      <svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="20%">
+        <rect width="100%" height="100%" fill="${color1}" rx="15" ry="15"/>
+        <path id="blob"
+          filter="url(#shadow)" d="${path}" fill="none" stroke-width="15px" stroke="${color2}"></path>
+        <filter id='shadow' color-interpolation-filters="sRGB">
+        <feDropShadow dx="20" dy="20" stdDeviation="8" flood-opacity="0.3" />
+        </filter>
+    </svg>
+      `;
+      return svg;
+    },
+    convertToBase64: function (svg) {
+      return "data:image/svg+xml;base64," + btoa(svg);
+    },
+    uploadIPFS: async function (base64) {
+      try {
+        const metaDataObj = {
+          name: this.name,
+          description: this.description,
+          image: base64,
+        };
+        const addedMetaData = await ipfsClient.add(JSON.stringify(metaDataObj));
+        return addedMetaData;
+      } catch (err) {
+        console.log(err);
+      }
+    },
+    fetchData: async function () {
+      this.blobs = []
+      let nfts = await this.contract.methods.getAllTokens().call();
+      nfts.forEach((nft) => {
+        fetch(nft.uri)
+          .then((response) => response.json())
+          .then((metaData) => {
+            this.blobs = [...this.blobs, { id: nft.id, metaData: metaData }];
+          })
+          .catch((err) => {
+            console.log(err);
+          });
+      });
+    },
   },
 };
 </script>
@@ -112,5 +183,13 @@ export default {
   text-align: center;
   color: #2c3e50;
   margin-top: 60px;
+}
+
+.container {
+  display: flex; /* or inline-flex */
+}
+
+.img {
+  padding: 5px;
 }
 </style>
