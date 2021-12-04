@@ -17,7 +17,8 @@
         :key="blob.id"
         :alt="blob.metaData.name"
         :src="blob.metaData.image"
-        width="250" height="250"
+        width="250"
+        height="250"
         class="img"
       />
     </div>
@@ -51,12 +52,12 @@ export default {
     };
   },
   computed: mapGetters("drizzle", ["isDrizzleInitialized"]),
-  mounted: function () {
+  mounted: function() {
     this.loadWeb3();
     this.loadBlockchainData();
   },
   methods: {
-    loadWeb3: async function () {
+    loadWeb3: async function() {
       if (window.ethereum) {
         window.web3 = new Web3(window.ethereum);
         await window.ethereum.enable();
@@ -68,7 +69,7 @@ export default {
         );
       }
     },
-    loadBlockchainData: async function () {
+    loadBlockchainData: async function() {
       const web3 = window.web3;
       const accounts = await web3.eth.getAccounts();
       this.account = accounts[0];
@@ -84,35 +85,32 @@ export default {
         window.alert("Smart contract not deployed to detected network.");
       }
     },
-    mint: async function () {
+    mint: async function() {
       const { path, seedValue } = blobshape({
         growth: 1,
         edges: 11,
         seed: null,
         pattern: "cross",
       });
-      let color1 = this.randomColor();
-      let color2 = this.randomColor();
+      let color1 = this.randomColor2();
+      let color2 = this.randomColor2();
 
       let svg = this.getSVG(color1, color2, path);
       let base64 = this.convertToBase64(svg);
 
       let addedMetaData = await this.uploadIPFS(base64);
 
-      console.log(this.ipfsBaseUrl + addedMetaData.path);
-
       this.contract.methods
         .mint(this.account, this.ipfsBaseUrl + addedMetaData.path)
         .send({ from: this.account })
-        .once("error", (err) => {
+        .once("error", () => {
           console.log(err);
         })
-        .then((receipt) => {
-          console.log(receipt);
+        .then(() => {
           this.fetchData();
         });
     },
-    randomColor: function () {
+    randomColor: function() {
       var o = Math.round,
         r = Math.random,
         s = 255;
@@ -128,23 +126,27 @@ export default {
         ")"
       );
     },
-    getSVG: function (color1, color2, path) {
+    randomColor2: function() {
+      var randomColor = Math.floor(Math.random() * 16777215).toString(16);
+      return "#" + randomColor;
+    },
+    getSVG: function(color1, color2, path) {
       let svg = `
-      <svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="20%">
+      <svg viewBox="0 0 400 400" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="100%">
         <rect width="100%" height="100%" fill="${color1}" rx="15" ry="15"/>
         <path id="blob"
           filter="url(#shadow)" d="${path}" fill="none" stroke-width="15px" stroke="${color2}"></path>
-        <filter id='shadow' color-interpolation-filters="sRGB">
+        <filter id='shadow' height="180%" width="180%" color-interpolation-filters="sRGB">
         <feDropShadow dx="20" dy="20" stdDeviation="8" flood-opacity="0.3" />
         </filter>
     </svg>
       `;
       return svg;
     },
-    convertToBase64: function (svg) {
+    convertToBase64: function(svg) {
       return "data:image/svg+xml;base64," + btoa(svg);
     },
-    uploadIPFS: async function (base64) {
+    uploadIPFS: async function(base64) {
       try {
         const metaDataObj = {
           name: this.name,
@@ -157,8 +159,8 @@ export default {
         console.log(err);
       }
     },
-    fetchData: async function () {
-      this.blobs = []
+    fetchData: async function() {
+      this.blobs = [];
       let nfts = await this.contract.methods.getAllTokens().call();
       nfts.forEach((nft) => {
         fetch(nft.uri)
@@ -183,10 +185,13 @@ export default {
   text-align: center;
   color: #2c3e50;
   margin-top: 60px;
+  align-content: center;
 }
 
 .container {
   display: flex; /* or inline-flex */
+  flex-wrap: wrap;
+  justify-content: center;
 }
 
 .img {
